@@ -1,0 +1,13 @@
+{
+    "name": "bayezid-killer",
+    "version": "1.0.0",
+    "main": "server.js",
+    "dependencies": {
+        "better-sqlite3": "^12.6.2",
+        "express": "^4.18.2"
+    },
+    "devDependencies": {
+        "eslint": "^8.57.0",
+        "eslint-plugin-security": "^1.7.1"
+    }
+}

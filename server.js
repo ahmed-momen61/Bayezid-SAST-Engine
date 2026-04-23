@@ -1,15 +1,21 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { analyzeCode } = require('./engines/sast_engine');
-const { db, initDB, saveScanResult } = require('./database'); // استدعاء الأدوات
+const { db, initDB, saveScanResult } = require('./database');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// تشغيل قاعدة البيانات عند البدء
 initDB();
 
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
-// 1. Endpoint للفحص (POST)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.post('/scan', async(req, res) => {
     console.log("[Bayezid] New Scan Request:", req.body);
     const { filePath, language } = req.body;
@@ -19,10 +25,13 @@ app.post('/scan', async(req, res) => {
     }
 
     try {
-        // تشغيل المحرك
-        const report = await analyzeCode(filePath, language);
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: "Target file not found on server" });
+        }
+        const codeContent = fs.readFileSync(filePath, 'utf8');
 
-        // حفظ النتيجة واستلام رقم الفحص
+        const report = await analyzeCode(codeContent, language);
+
         let scanId = "NOT_SAVED";
         try {
             scanId = saveScanResult(filePath, language, report);
@@ -44,21 +53,39 @@ app.post('/scan', async(req, res) => {
     }
 });
 
-// 2. Endpoint للتقرير الذكي (GET)
-// ده بيجيب تفاصيل الثغرة + الحل المقترح من قاعدة المعرفة
+app.get('/api/latest-report', (req, res) => {
+    const reportsDir = path.join(__dirname, 'reports');
+
+    if (!fs.existsSync(reportsDir)) {
+        return res.status(404).json({ error: "No reports directory found." });
+    }
+
+    const files = fs.readdirSync(reportsDir).filter(f => f.endsWith('.sarif'));
+
+    if (files.length === 0) {
+        return res.status(404).json({ error: "No SARIF reports found." });
+    }
+
+    const latestFile = files.map(fileName => ({
+            name: fileName,
+            time: fs.statSync(path.join(reportsDir, fileName)).mtime.getTime()
+        }))
+        .sort((a, b) => b.time - a.time)[0].name;
+
+    const reportData = fs.readFileSync(path.join(reportsDir, latestFile), 'utf8');
+    res.json(JSON.parse(reportData));
+});
+
 app.get('/report/:id', (req, res) => {
     const scanId = req.params.id;
 
     try {
-        // جلب معلومات الفحص
         const scan = db.prepare('SELECT * FROM scans WHERE id = ?').get(scanId);
 
         if (!scan) {
             return res.status(404).json({ error: "Report not found" });
         }
 
-        // جلب الثغرات مع دمجها بمعلومات الـ Knowledge Base
-        // Left Join عشان لو الثغرة ملهاش تعريف، تظهر برضه بس من غير تفاصيل زيادة
         const issues = db.prepare(`
             SELECT 
                 issues.file_path,
@@ -94,4 +121,6 @@ app.get('/report/:id', (req, res) => {
     }
 });
 
-app.listen(3000, () => console.log("Bayezid is Ready on Port 3000!"));
+app.listen(PORT, () => {
+    console.log(`[+] Bayezid SAST Server is Ready on http://localhost:${PORT}`);
+});

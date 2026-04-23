@@ -1,107 +1,103 @@
-const { exec } = require('child_process');
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { analyzeDataFlow } = require('./data_flow_analyzer');
 
-const analyzeCode = (filePath, language) => {
-    return new Promise((resolve, reject) => {
-        // تنظيف المسار من الرموز الزائدة
-        const cleanPath = filePath.replace('./', '').replace('.\\', '');
+const analyzeCode = (code, language = 'javascript') => {
+    return new Promise((resolve) => {
+        try {
+            const tempFileName = `temp_scan_${Date.now()}.${language === 'python' ? 'py' : 'js'}`;
+            const tempFilePath = path.resolve(__dirname, '..', tempFileName);
+            fs.writeFileSync(tempFilePath, code, 'utf8');
 
-        // مسار ESLint المباشر (الحل السحري لمشاكل الويندوز)
-        const eslintPath = 'node_modules/eslint/bin/eslint.js';
+            let command;
+            let output = '';
 
-        // تكوين الأمر حسب اللغة
-        const command = language === 'python' ?
-            `bandit -r "${cleanPath}" -f json -q` :
-            `node "${eslintPath}" "${cleanPath}" --no-eslintrc -c .eslintrc.json --format json`;
-
-        console.log(`[Bayezid] Scanning Command: ${command}`);
-
-        exec(command, { maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
-            // محاولة استخراج JSON نظيف من المخرجات
-            const jsonStartIndex = stdout.indexOf(language === 'python' ? '{' : '[');
-            const jsonEndIndex = stdout.lastIndexOf(language === 'python' ? '}' : ']');
-
-            let cleanOutput = stdout;
-            if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
-                cleanOutput = stdout.substring(jsonStartIndex, jsonEndIndex + 1);
+            if (language === 'python') {
+                command = `bandit -r "${tempFilePath}" -f json -q`;
+            } else {
+                const eslintPath = path.resolve(__dirname, '..', 'node_modules/eslint/bin/eslint.js');
+                const eslintrcPath = path.resolve(__dirname, '..', '.eslintrc.json');
+                command = `node "${eslintPath}" "${tempFilePath}" --no-eslintrc -c "${eslintrcPath}" --format json`;
             }
 
             try {
-                // تحويل النص لـ JSON
-                // لو المخرج فاضي بنحط قيمة افتراضية عشان الكود مايضربش
-                const rawData = JSON.parse(cleanOutput || (language === 'python' ? '{}' : '[]'));
-
-                // معالجة البيانات واستخراج الثغرات
-                const processedIssues = processVulnerabilities(rawData, language);
-
-                resolve({
-                    language,
-                    scan_time: new Date().toISOString(),
-                    vulnerabilities_count: processedIssues.length,
-                    issues: processedIssues
-                });
-            } catch (e) {
-                console.error("[Bayezid] Parse Error:", e.message);
-                // في حالة الخطأ بنرجع مصفوفة فاضية
-                resolve({ vulnerabilities_count: 0, issues: [] });
+                output = execSync(command, { encoding: 'utf-8', stdio: 'pipe' });
+            } catch (err) {
+                output = err.stdout || err.stderr || '';
             }
-        });
+
+            if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+
+            const startChar = language === 'python' ? '{' : '[';
+            const endChar = language === 'python' ? '}' : ']';
+            const jsonStartIndex = output.indexOf(startChar);
+            const jsonEndIndex = output.lastIndexOf(endChar);
+
+            let cleanOutput = output;
+            if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
+                cleanOutput = output.substring(jsonStartIndex, jsonEndIndex + 1);
+            }
+
+            const rawData = JSON.parse(cleanOutput || (language === 'python' ? '{}' : '[]'));
+            const processedIssues = processVulnerabilities(rawData, language);
+
+            let finalIssues = processedIssues;
+            if (language === 'javascript') {
+                const taintIssues = analyzeDataFlow(code);
+                const cleanTaintIssues = taintIssues.map(issue => ({
+                    ...issue,
+                    file: 'Uploaded_JS_File.js',
+                    mitre_ref: 'T1059: Command and Scripting Interpreter',
+                    id: `VULN-${Math.floor(Math.random() * 10000)}`
+                }));
+                finalIssues = [...processedIssues, ...cleanTaintIssues];
+            }
+
+            resolve({
+                language,
+                scan_time: new Date().toISOString(),
+                vulnerabilities_count: finalIssues.length,
+                issues: finalIssues
+            });
+
+        } catch (error) {
+            console.error('[-] Bayezid Engine Error:', error.message);
+            resolve({ vulnerabilities_count: 0, issues: [] });
+        }
     });
 };
 
 const processVulnerabilities = (data, language) => {
     let issues = [];
-
     if (language === 'python') {
-        // في حالة Python (Bandit)، البيانات بتيجي جاهزة في results
-        // وبنأكد إن اسم الملف موجود
-        issues = (data.results || []).map(issue => ({
-            ...issue,
-            target_file: issue.filename
-        }));
-    } else {
-        // في حالة JavaScript (ESLint)
-        // البيانات بتيجي عبارة عن مصفوفة ملفات، وكل ملف جواه messages
-        if (Array.isArray(data)) {
-            data.forEach(fileResult => {
-                // لو الملف ده فيه أخطاء
-                if (fileResult.messages && fileResult.messages.length > 0) {
-                    // بنلف على كل خطأ ونحط له اسم الملف بتاع الأب
-                    fileResult.messages.forEach(msg => {
-                        issues.push({
-                            ...msg, // خد كل تفاصيل الخطأ
-                            target_file: fileResult.filePath // وضيف عليها مسار الملف
-                        });
-                    });
-                }
-            });
-        }
+        issues = (data.results || []).map(issue => ({...issue, target_file: 'Uploaded_File.py' }));
+    } else if (Array.isArray(data)) {
+        data.forEach(fileResult => {
+            if (fileResult.messages) {
+                fileResult.messages.forEach(msg => {
+                    issues.push({...msg, target_file: 'Uploaded_File.js' });
+                });
+            }
+        });
     }
 
-    // توحيد شكل المخرجات النهائي (Mapping)
     return issues.map(issue => ({
         id: `VULN-${Math.floor(Math.random() * 10000)}`,
-        // استخراج كود الثغرة للربط مع قاعدة البيانات (Knowledge Base)
-        rule_id: issue.test_id || issue.ruleId || 'UNKNOWN',
+        rule_id: issue.test_id || issue.ruleId || 'SECURITY-RULE',
         severity: issue.issue_severity || (issue.severity === 2 ? 'HIGH' : 'LOW'),
         description: issue.issue_text || issue.message,
         line: issue.line_number || issue.line,
-        // هنا الحل للمشكلة: بنستخدم المسار اللي جهزناه فوق
-        file: issue.target_file || issue.filename || issue.filePath || 'unknown',
-        mitre_ref: mapToMitre(issue.issue_text || issue.message || issue.ruleId)
+        mitre_ref: mapToMitre(issue.issue_text || issue.message || '')
     }));
 };
 
 const mapToMitre = (text) => {
-    const t = text ? text.toLowerCase() : "";
-
-    // قواعد ربط MITRE ATT&CK
-    if (t.includes('sql')) return 'T1190: Exploit Public-Facing Application';
-    if (t.includes('password') || t.includes('secret') || t.includes('credential')) return 'T1552: Unsecured Credentials';
-    if (t.includes('exec') || t.includes('shell') || t.includes('command') || t.includes('child_process')) return 'T1059: Command and Scripting Interpreter';
-    if (t.includes('eval')) return 'T1059: Command and Scripting Interpreter';
-    if (t.includes('md5') || t.includes('hash') || t.includes('crypto')) return 'T1027: Obfuscated Files or Information';
-
-    return 'T1203: Exploitation for Client Execution';
+    const t = text.toLowerCase();
+    if (t.includes('sql')) return 'T1190';
+    if (t.includes('exec') || t.includes('shell')) return 'T1059';
+    if (t.includes('password') || t.includes('secret')) return 'T1552';
+    return 'T1203';
 };
 
 module.exports = { analyzeCode };

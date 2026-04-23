@@ -1,11 +1,9 @@
 const Database = require('better-sqlite3');
 const db = new Database('bayezid.db', { verbose: console.log });
 
-// تفعيل المفاتيح الخارجية للربط بين الجداول
 db.pragma('foreign_keys = ON');
 
 const initDB = () => {
-    // 1. جدول الفحوصات (Scans)
     db.exec(`
         CREATE TABLE IF NOT EXISTS scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17,10 +15,9 @@ const initDB = () => {
         )
     `);
 
-    // 2. جدول قاعدة المعرفة (Knowledge Base) - ده اللي فيه الذكاء
     db.exec(`
         CREATE TABLE IF NOT EXISTS kb_definitions (
-            vuln_id TEXT PRIMARY KEY, -- الكود الأصلي (زي B608 أو security/detect-eval)
+            vuln_id TEXT PRIMARY KEY, (B608 | security/detect-eval)
             cwe_id TEXT,
             title TEXT,
             description TEXT,
@@ -29,21 +26,19 @@ const initDB = () => {
         )
     `);
 
-    // 3. جدول الثغرات المكتشفة (Issues)
     db.exec(`
         CREATE TABLE IF NOT EXISTS issues (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             scan_id INTEGER,
             file_path TEXT,
             line_number INTEGER,
-            vuln_id TEXT, -- مفتاح الربط مع جدول المعرفة
+            vuln_id TEXT, 
             raw_text TEXT,
             severity TEXT,
             FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE
         )
     `);
 
-    // حشو بيانات (Seed Data) عشان نجرب الذكاء
     seedKnowledgeBase();
     console.log("🦁 Bayezid Database Initialized & Ready!");
 };
@@ -59,7 +54,7 @@ const seedKnowledgeBase = () => {
     });
 
     transaction([{
-            vuln_id: 'B608', // Bandit SQLi
+            vuln_id: 'B608',
             cwe_id: 'CWE-89',
             title: 'Hardcoded SQL Injection',
             description: 'Possible SQL injection vector through string concatenation.',
@@ -67,7 +62,7 @@ const seedKnowledgeBase = () => {
             cvss_score: 9.8
         },
         {
-            vuln_id: 'security/detect-eval-with-expression', // ESLint Eval
+            vuln_id: 'security/detect-eval-with-expression',
             cwe_id: 'CWE-95',
             title: 'Improper Neutralization of Directives in Dynamically Evaluated Code (Eval Injection)',
             description: 'User input is passed correctly to eval() function allowing arbitrary code execution.',
@@ -75,7 +70,7 @@ const seedKnowledgeBase = () => {
             cvss_score: 10.0
         },
         {
-            vuln_id: 'security/detect-child-process', // ESLint Exec
+            vuln_id: 'security/detect-child-process',
             cwe_id: 'CWE-78',
             title: 'OS Command Injection',
             description: 'User input used in OS command execution.',

@@ -1,33 +1,32 @@
-# 🛡️ Bayezid SAST Engine
+# 🛡️ Bayezid SAST Engine: Advanced Static Analysis
 
 ![Node.js](https://img.shields.io/badge/Node.js-Environment-success?style=for-the-badge&logo=nodedotjs)
-![Express](https://img.shields.io/badge/Express.js-Framework-lightgrey?style=for-the-badge)
-![SQLite](https://img.shields.io/badge/SQLite-Database-blue?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-Active_Development-orange?style=for-the-badge)
+![Security](https://img.shields.io/badge/Analysis-Taint%20%26%20AST-darkred?style=for-the-badge)
+![Format](https://img.shields.io/badge/Output-SARIF%20Standard-blue?style=for-the-badge)
 
-## 📌 Project Overview
-**Bayezid SAST** is a custom-built Static Application Security Testing (SAST) engine designed to autonomously analyze source code for critical security vulnerabilities. Leveraging Abstract Syntax Tree (AST) parsing and customized security linting algorithms, the engine provides deep inspection capabilities alongside a unique visualizer to map out code execution and vulnerability paths.
+## 🦁 Why Bayezid?
+**Bayezid** is not just a linter; it's a security-first Static Application Security Testing (SAST) engine designed to hunt for high-impact vulnerabilities. It goes beyond simple pattern matching by analyzing the **Data Flow** and **Abstract Syntax Trees (AST)** of application code.
 
-## ✨ Core Features
-* **Automated Code Scanning:** Rapidly identifies security flaws in user-uploaded code via a robust Express.js API.
-* **AST Parsing & Visualization:** Utilizes parsing libraries (`acorn`/`espree`) to generate Abstract Syntax Trees, providing a clear visual representation of application logic via the internal `visualizer_logic.js` engine.
-* **Multi-Language Targeting:** Designed to process and analyze both JavaScript and Python source files.
-* **Persistent Vulnerability Tracking:** Securely logs scan results, engine states, and identified threats into a centralized, high-performance SQLite database (`bayezid.db`).
+## 🚀 Key Features
+* **🧠 Taint Analysis Engine:** Tracks unsanitized user input from "Sources" (like Express parameters) to "Sinks" (dangerous functions like `exec` or `eval`).
+* **📊 Visual Dashboard:** A built-in web interface to view scan statistics and detailed vulnerability reports.
+* **💻 DevSecOps Ready (CLI):** Includes a Command Line Interface that exits with non-zero codes on findings, making it perfect for CI/CD pipelines.
+* **📄 Industry Standard Reporting:** Generates **SARIF 2.1.0** reports, compatible with GitHub Security Center and major IDEs.
 
-## 🚨 Vulnerability Coverage (Test Cases)
-The engine is actively tested and calibrated against common attack vectors. The `uploads/` directory contains standard vulnerable test cases for engine validation:
-* **Command Injection** (`vuln_cmd_injection.js`)
-* **Cryptographic Failures & Weak Ciphers** (`vuln_crypto.py`)
-* **Hardcoded Secrets & Credentials** (`vuln_secrets.py`)
-* **Database Flaws / SQL Injection** (`vulnerable_db.js`)
+## ⛓️ How it Works
+The engine processes code through two parallel pipelines:
+1. **The Linter Layer:** Uses `eslint-plugin-security` for signature-based detection.
+2. **The Intelligence Layer:** Uses `acorn` to parse code into AST and perform recursive Taint analysis to prove exploitability.
 
-## 🛠️ Technology Stack
-* **Backend Core:** Node.js, Express.js
-* **Database:** `better-sqlite3`
-* **Analysis Engine:** Custom detection logic integrated with `eslint-plugin-security`
-* **Code Parsing:** `acorn`, `espree`, `js-yaml`
+## 🛠️ Installation
+```bash
+# Clone and install
+git clone [https://github.com/ahmed-momen61/sast.git](https://github.com/ahmed-momen61/sast.git)
+cd sast
+npm install
 
-## 🚀 Installation & Setup
-1. Clone the repository:
-   ```bash
-   git clone [https://github.com/ahmed-momen61/sast.git](https://github.com/ahmed-momen61/sast.git)
+# Start the Dashboard Server
+node server.js
+
+# Run a CLI Scan
+node cli.js ./uploads/vuln_cmd_injection.js
